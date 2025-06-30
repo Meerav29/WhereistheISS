@@ -45,11 +45,7 @@
                 <h2 class="text-xl font-bold text-gray-200 mb-2">Your Location</h2>
                 <div id="location-info" class="text-violet-400 flex items-center space-x-2">
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-6 h-6"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
-<<<<<<< HEAD
                     <span id="location-text">Requesting location...</span>
-=======
-                    <span>Loading location...</span>
->>>>>>> 7d1884653fce1445ea84b65802f32fdea84ec41a
                 </div>
             </div>
             <div>
@@ -65,14 +61,8 @@
         <div>
             <h2 class="text-2xl font-bold text-center mb-6 text-gray-200">Upcoming Visible Passes</h2>
             <div id="passes-container" class="space-y-4">
-<<<<<<< HEAD
                 <div id="loading-passes" class="text-center py-8">
                     <p class="text-lg text-gray-400">Waiting for location to calculate passes...</p>
-=======
-                <!-- "Calculating" message will be replaced by pass cards -->
-                <div id="loading-passes" class="text-center py-8">
-                    <p class="text-lg text-gray-400">Calculating visible passes...</p>
->>>>>>> 7d1884653fce1445ea84b65802f32fdea84ec41a
                 </div>
             </div>
         </div>
@@ -89,53 +79,30 @@
         document.addEventListener('DOMContentLoaded', () => {
             // --- CONFIGURATION ---
             
-<<<<<<< HEAD
             // Default location if Geolocation fails: Park Forest Village, PA
             const defaultLocation = {
                 name: 'Park Forest Village, PA (Default)',
-=======
-            // Observer's location: Park Forest Village, PA
-            const observerLocation = {
-                name: 'Park Forest Village, PA',
->>>>>>> 7d1884653fce1445ea84b65802f32fdea84ec41a
                 lat: 40.801,
                 lng: -77.909,
                 alt: 0.410 // altitude in km
             };
             
             // Satellite Two-Line Element (TLE) for the ISS (ZARYA)
-<<<<<<< HEAD
-=======
-            // NOTE: For a real-world app, this should be fetched from an API regularly, as it becomes outdated.
->>>>>>> 7d1884653fce1445ea84b65802f32fdea84ec41a
             const tleLine1 = '1 25544U 98067A   25181.54635115  .00016717  00000-0  30306-4 0  9999';
             const tleLine2 = '2 25544  51.6416 251.4693 0006753  45.3412  69.2155 15.48934353 34659';
 
             // Initialize satellite record from TLE
             const satrec = satellite.twoline2satrec(tleLine1, tleLine2);
-<<<<<<< HEAD
             
             // --- UI UPDATE FUNCTIONS ---
 
             function displayLocation(location) {
                 const locationEl = document.getElementById('location-text');
                 locationEl.textContent = `${location.name} (${location.lat.toFixed(2)}°, ${location.lng.toFixed(2)}°)`;
-=======
-
-            // --- UI UPDATE FUNCTIONS ---
-
-            function displayLocation() {
-                const locationEl = document.getElementById('location-info').querySelector('span');
-                locationEl.textContent = `${observerLocation.name} (${observerLocation.lat.toFixed(2)}°, ${observerLocation.lng.toFixed(2)}°)`;
->>>>>>> 7d1884653fce1445ea84b65802f32fdea84ec41a
             }
 
             function displayPasses(passes) {
                 const container = document.getElementById('passes-container');
-<<<<<<< HEAD
-=======
-                const loadingMessage = document.getElementById('loading-passes');
->>>>>>> 7d1884653fce1445ea84b65802f32fdea84ec41a
                 
                 // Clear the "Calculating..." message
                 container.innerHTML = '';
@@ -146,11 +113,7 @@
                 }
 
                 passes.forEach(pass => {
-<<<<<<< HEAD
                     const duration = Math.round((pass.end.time - pass.start.time) / 60000);
-=======
-                    const duration = Math.round((pass.end.time - pass.start.time) / 60000); // in minutes
->>>>>>> 7d1884653fce1445ea84b65802f32fdea84ec41a
                     
                     const card = document.createElement('div');
                     card.className = 'pass-card bg-gray-800 rounded-lg p-4 shadow-md border border-gray-700 transition-all duration-300';
@@ -190,27 +153,12 @@
 
             // --- CALCULATION LOGIC ---
 
-<<<<<<< HEAD
             const satelliteHelpers = {
                 earthRadius: 6378.137,
-=======
-            /**
-             * Helper functions for astronomical calculations not included in the core satellite.js
-             */
-            const satelliteHelpers = {
-                earthRadius: 6378.137, // Earth radius in km
-
-                /**
-                 * Calculates the Sun's ECI position vector.
-                 * @param {Date} date The date object.
-                 * @returns {object} ECI position vector {x, y, z} in km.
-                 */
->>>>>>> 7d1884653fce1445ea84b65802f32fdea84ec41a
                 getSunEci: function(date) {
                     const j2000 = 2451545.0;
                     const julianDate = (date.getTime() / 86400000) + 2440587.5;
                     const daysSince2000 = julianDate - j2000;
-<<<<<<< HEAD
                     const meanLongitude = (280.460 + 0.9856474 * daysSince2000) % 360;
                     const meanAnomaly = (357.528 + 0.9856003 * daysSince2000) % 360;
                     const eclipticLongitude = meanLongitude + 1.915 * Math.sin(satellite.degreesToRadians(meanAnomaly)) + 0.020 * Math.sin(satellite.degreesToRadians(2 * meanAnomaly));
@@ -234,85 +182,20 @@
                     const b = this.earthRadius**2;
                     return a > b;
                 },
-=======
-
-                    const meanLongitude = (280.460 + 0.9856474 * daysSince2000) % 360;
-                    const meanAnomaly = (357.528 + 0.9856003 * daysSince2000) % 360;
-
-                    const eclipticLongitude = meanLongitude + 1.915 * Math.sin(satellite.degreesToRadians(meanAnomaly)) + 0.020 * Math.sin(satellite.degreesToRadians(2 * meanAnomaly));
-                    const obliquity = 23.439 - 0.0000004 * daysSince2000;
-                    const distance = 149597870.7; // AU in km
-
-                    const lonRad = satellite.degreesToRadians(eclipticLongitude);
-                    const oblRad = satellite.degreesToRadians(obliquity);
-
-                    const x = distance * Math.cos(lonRad);
-                    const y = distance * Math.sin(lonRad) * Math.cos(oblRad);
-                    const z = distance * Math.sin(lonRad) * Math.sin(oblRad);
-                    
-                    return { x, y, z };
-                },
-
-                /**
-                 * Checks if the satellite is illuminated by the sun.
-                 * @param {object} satEci The satellite's ECI position vector.
-                 * @param {object} sunEci The sun's ECI position vector.
-                 * @returns {boolean} True if the satellite is in sunlight.
-                 */
-                isSatSunlit: function(satEci, sunEci) {
-                    const r_sat = [satEci.x, satEci.y, satEci.z];
-                    const r_sun = [sunEci.x, sunEci.y, sunEci.z];
-                    
-                    const dot_product = r_sat[0] * r_sun[0] + r_sat[1] * r_sun[1] + r_sat[2] * r_sun[2];
-                    if (dot_product > 0) {
-                        return true; // Satellite is on the sun-side of the Earth
-                    }
-                    
-                    const r_sat_mag_sq = r_sat[0]**2 + r_sat[1]**2 + r_sat[2]**2;
-                    const proj_of_sat_on_sun = dot_product / Math.sqrt(r_sun[0]**2 + r_sun[1]**2 + r_sun[2]**2);
-                    
-                    const a = r_sat_mag_sq - proj_of_sat_on_sun**2;
-                    const b = this.earthRadius**2;
-                    
-                    return a > b; // Returns true if the satellite is not behind the Earth disk.
-                },
-                
-                /**
-                 * Checks if it's dark at the observer's location.
-                 * @param {object} observerGd The observer's geodetic coordinates.
-                 * @param {object} sunEci The sun's ECI position vector.
-                 * @param {Date} date The current date/time.
-                 * @returns {boolean} True if it is dark.
-                 */
->>>>>>> 7d1884653fce1445ea84b65802f32fdea84ec41a
                 isObserverDark: function(observerGd, sunEci, date) {
                     const gmst = satellite.gstime(date);
                     const sunEcf = satellite.eciToEcf(sunEci, gmst);
                     const lookAngles = satellite.ecfToLookAngles(observerGd, sunEcf);
-<<<<<<< HEAD
-=======
-                    
-                    // Check if sun elevation is below the horizon (e.g., -6 degrees for civil twilight)
->>>>>>> 7d1884653fce1445ea84b65802f32fdea84ec41a
                     return satellite.radiansToDegrees(lookAngles.elevation) < -6;
                 }
             };
 
-<<<<<<< HEAD
-=======
-            /**
-             * Converts azimuth in degrees to a compass direction string.
-             * @param {number} azimuth - Azimuth in degrees (0-360).
-             * @returns {string} Compass direction (e.g., N, NE, E).
-             */
->>>>>>> 7d1884653fce1445ea84b65802f32fdea84ec41a
             function convertAzimuthToCompass(azimuth) {
                 const directions = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
                 const index = Math.round(azimuth / 22.5) % 16;
                 return directions[index];
             }
             
-<<<<<<< HEAD
             function calculateAndDisplayPasses(observerLocation) {
                 displayLocation(observerLocation);
                 
@@ -396,83 +279,6 @@
             }
 
             initializeApp();
-=======
-            function calculateVisiblePasses() {
-                const observerGd = {
-                    longitude: satellite.degreesToRadians(observerLocation.lng),
-                    latitude: satellite.degreesToRadians(observerLocation.lat),
-                    height: observerLocation.alt
-                };
-
-                const passes = [];
-                const now = new Date();
-                const minutesToSearch = 7 * 24 * 60; // 7 days
-                const step = 60 * 1000; // 1 minute in milliseconds
-                let inPass = false;
-                let currentPass = {};
-
-                for (let i = 0; i < minutesToSearch; i++) {
-                    const time = new Date(now.getTime() + i * step);
-                    
-                    // Get satellite ECI position and velocity
-                    const positionAndVelocity = satellite.propagate(satrec, time);
-                    const positionEci = positionAndVelocity.position;
-                    
-                    // Get satellite look angles from observer
-                    const gmst = satellite.gstime(time);
-                    const positionEcf = satellite.eciToEcf(positionEci, gmst);
-                    const lookAngles = satellite.ecfToLookAngles(observerGd, positionEcf);
-                    
-                    const elevation = satellite.radiansToDegrees(lookAngles.elevation);
-                    const isAboveHorizon = elevation > 10; // Only consider passes with elevation > 10 degrees
-
-                    // Get sun position and check sunlight conditions using our new helpers
-                    const sunEci = satelliteHelpers.getSunEci(time);
-                    const isSatInSunlight = satelliteHelpers.isSatSunlit(positionEci, sunEci);
-                    const isObserverInDarkness = satelliteHelpers.isObserverDark(observerGd, sunEci, time);
-                    
-                    if (isAboveHorizon && isSatInSunlight && isObserverInDarkness) {
-                        if (!inPass) {
-                            // Start of a new pass
-                            inPass = true;
-                            currentPass = {
-                                start: {
-                                    time: time,
-                                    azimuth: satellite.radiansToDegrees(lookAngles.azimuth)
-                                },
-                                max: {
-                                    time: time,
-                                    elevation: elevation
-                                }
-                            };
-                        }
-
-                        // Update max elevation for the current pass
-                        if (elevation > currentPass.max.elevation) {
-                            currentPass.max.elevation = elevation;
-                            currentPass.max.time = time;
-                        }
-                    } else {
-                        if (inPass) {
-                            // End of the current pass
-                            inPass = false;
-                            currentPass.end = {
-                                time: time,
-                                azimuth: satellite.radiansToDegrees(lookAngles.azimuth)
-                            };
-                            passes.push(currentPass);
-                        }
-                    }
-                }
-                
-                return passes;
-            }
-
-            // --- INITIALIZATION ---
-            displayLocation();
-            const passes = calculateVisiblePasses();
-            displayPasses(passes);
->>>>>>> 7d1884653fce1445ea84b65802f32fdea84ec41a
         });
     </script>
 
