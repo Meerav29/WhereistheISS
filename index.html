@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Satellite Pass Predictor</title>
+    
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    
+    <!-- satellite.js for orbital mechanics calculations -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/satellite.js/4.1.4/satellite.min.js"></script>
+
+    <style>
+        /* Use the Inter font family */
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        /* Custom styles for a subtle glow effect on cards */
+        .pass-card:hover {
+            box-shadow: 0 0 15px rgba(167, 139, 250, 0.4);
+            transform: translateY(-2px);
+            transition: all 0.3s ease;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white antialiased">
+
+    <div class="container mx-auto p-4 md:p-8 max-w-4xl">
+        
+        <!-- Header Section -->
+        <header class="text-center mb-8">
+            <h1 class="text-4xl md:text-5xl font-bold text-violet-300 mb-2">Satellite Pass Predictor</h1>
+            <p class="text-lg text-gray-400">Find out when you can see satellites fly over your location.</p>
+        </header>
+
+        <!-- Configuration Section -->
+        <div class="bg-gray-800 p-6 rounded-lg shadow-lg mb-8 grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+                <h2 class="text-xl font-bold text-gray-200 mb-2">Your Location</h2>
+                <div id="location-info" class="text-violet-400 flex items-center space-x-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-6 h-6"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+                    <span>Loading location...</span>
+                </div>
+            </div>
+            <div>
+                <h2 class="text-xl font-bold text-gray-200 mb-2">Selected Satellite</h2>
+                <div id="satellite-info" class="text-violet-400 flex items-center space-x-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-6 h-6"><path d="m12 8-3.5 3.5 4 4L16 12l-4-4z"/><path d="m18 6-2.5 2.5"/><path d="m6 18 2.5-2.5"/><path d="m2 12 4 4"/><path d="m12 2 4 4"/><path d="M22 12h-4"/><path d="M12 22v-4"/><path d="M6 12H2"/></svg>
+                    <span>ISS (ZARYA)</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Passes Display Section -->
+        <div>
+            <h2 class="text-2xl font-bold text-center mb-6 text-gray-200">Upcoming Visible Passes</h2>
+            <div id="passes-container" class="space-y-4">
+                <!-- "Calculating" message will be replaced by pass cards -->
+                <div id="loading-passes" class="text-center py-8">
+                    <p class="text-lg text-gray-400">Calculating visible passes...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <footer class="text-center mt-12 text-gray-500 text-sm">
+            <p>Calculations performed using <a href="https://github.com/shashwatak/satellite-js" target="_blank" class="underline hover:text-violet-400">satellite.js</a>.</p>
+            <p>Satellite TLE data courtesy of <a href="https://celestrak.org/" target="_blank" class="underline hover:text-violet-400">CelesTrak</a>.</p>
+        </footer>
+
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // --- CONFIGURATION ---
+            
+            // Observer's location: Park Forest Village, PA
+            const observerLocation = {
+                name: 'Park Forest Village, PA',
+                lat: 40.801,
+                lng: -77.909,
+                alt: 0.410 // altitude in km
+            };
+            
+            // Satellite Two-Line Element (TLE) for the ISS (ZARYA)
+            // NOTE: For a real-world app, this should be fetched from an API regularly, as it becomes outdated.
+            const tleLine1 = '1 25544U 98067A   25181.54635115  .00016717  00000-0  30306-4 0  9999';
+            const tleLine2 = '2 25544  51.6416 251.4693 0006753  45.3412  69.2155 15.48934353 34659';
+
+            // Initialize satellite record from TLE
+            const satrec = satellite.twoline2satrec(tleLine1, tleLine2);
+
+            // --- UI UPDATE FUNCTIONS ---
+
+            function displayLocation() {
+                const locationEl = document.getElementById('location-info').querySelector('span');
+                locationEl.textContent = `${observerLocation.name} (${observerLocation.lat.toFixed(2)}°, ${observerLocation.lng.toFixed(2)}°)`;
+            }
+
+            function displayPasses(passes) {
+                const container = document.getElementById('passes-container');
+                const loadingMessage = document.getElementById('loading-passes');
+                
+                // Clear the "Calculating..." message
+                container.innerHTML = '';
+
+                if (passes.length === 0) {
+                    container.innerHTML = `<div class="text-center py-8 bg-gray-800 rounded-lg"><p class="text-lg text-gray-400">No visible passes found in the next 7 days.</p></div>`;
+                    return;
+                }
+
+                passes.forEach(pass => {
+                    const duration = Math.round((pass.end.time - pass.start.time) / 60000); // in minutes
+                    
+                    const card = document.createElement('div');
+                    card.className = 'pass-card bg-gray-800 rounded-lg p-4 shadow-md border border-gray-700 transition-all duration-300';
+                    
+                    const formattedDate = new Intl.DateTimeFormat('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }).format(pass.start.time);
+                    const formattedStartTime = pass.start.time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+
+                    card.innerHTML = `
+                        <div class="flex flex-col md:flex-row justify-between items-start md:items-center">
+                            <div class="mb-4 md:mb-0">
+                                <p class="text-xl font-bold text-violet-300">${formattedDate}</p>
+                                <p class="text-gray-400">Starts at ${formattedStartTime}</p>
+                            </div>
+                            <div class="text-right">
+                                <p class="text-2xl font-bold">${pass.max.elevation.toFixed(0)}°</p>
+                                <p class="text-gray-400">Max Elevation</p>
+                            </div>
+                        </div>
+                        <div class="mt-4 pt-4 border-t border-gray-700 grid grid-cols-3 gap-2 text-center">
+                            <div>
+                                <p class="text-lg font-semibold">${convertAzimuthToCompass(pass.start.azimuth)}</p>
+                                <p class="text-sm text-gray-400">Appears</p>
+                            </div>
+                            <div>
+                                <p class="text-lg font-semibold">${duration} min</p>
+                                <p class="text-sm text-gray-400">Visible</p>
+                            </div>
+                            <div>
+                                <p class="text-lg font-semibold">${convertAzimuthToCompass(pass.end.azimuth)}</p>
+                                <p class="text-sm text-gray-400">Disappears</p>
+                            </div>
+                        </div>
+                    `;
+                    container.appendChild(card);
+                });
+            }
+
+            // --- CALCULATION LOGIC ---
+
+            /**
+             * Helper functions for astronomical calculations not included in the core satellite.js
+             */
+            const satelliteHelpers = {
+                earthRadius: 6378.137, // Earth radius in km
+
+                /**
+                 * Calculates the Sun's ECI position vector.
+                 * @param {Date} date The date object.
+                 * @returns {object} ECI position vector {x, y, z} in km.
+                 */
+                getSunEci: function(date) {
+                    const j2000 = 2451545.0;
+                    const julianDate = (date.getTime() / 86400000) + 2440587.5;
+                    const daysSince2000 = julianDate - j2000;
+
+                    const meanLongitude = (280.460 + 0.9856474 * daysSince2000) % 360;
+                    const meanAnomaly = (357.528 + 0.9856003 * daysSince2000) % 360;
+
+                    const eclipticLongitude = meanLongitude + 1.915 * Math.sin(satellite.degreesToRadians(meanAnomaly)) + 0.020 * Math.sin(satellite.degreesToRadians(2 * meanAnomaly));
+                    const obliquity = 23.439 - 0.0000004 * daysSince2000;
+                    const distance = 149597870.7; // AU in km
+
+                    const lonRad = satellite.degreesToRadians(eclipticLongitude);
+                    const oblRad = satellite.degreesToRadians(obliquity);
+
+                    const x = distance * Math.cos(lonRad);
+                    const y = distance * Math.sin(lonRad) * Math.cos(oblRad);
+                    const z = distance * Math.sin(lonRad) * Math.sin(oblRad);
+                    
+                    return { x, y, z };
+                },
+
+                /**
+                 * Checks if the satellite is illuminated by the sun.
+                 * @param {object} satEci The satellite's ECI position vector.
+                 * @param {object} sunEci The sun's ECI position vector.
+                 * @returns {boolean} True if the satellite is in sunlight.
+                 */
+                isSatSunlit: function(satEci, sunEci) {
+                    const r_sat = [satEci.x, satEci.y, satEci.z];
+                    const r_sun = [sunEci.x, sunEci.y, sunEci.z];
+                    
+                    const dot_product = r_sat[0] * r_sun[0] + r_sat[1] * r_sun[1] + r_sat[2] * r_sun[2];
+                    if (dot_product > 0) {
+                        return true; // Satellite is on the sun-side of the Earth
+                    }
+                    
+                    const r_sat_mag_sq = r_sat[0]**2 + r_sat[1]**2 + r_sat[2]**2;
+                    const proj_of_sat_on_sun = dot_product / Math.sqrt(r_sun[0]**2 + r_sun[1]**2 + r_sun[2]**2);
+                    
+                    const a = r_sat_mag_sq - proj_of_sat_on_sun**2;
+                    const b = this.earthRadius**2;
+                    
+                    return a > b; // Returns true if the satellite is not behind the Earth disk.
+                },
+                
+                /**
+                 * Checks if it's dark at the observer's location.
+                 * @param {object} observerGd The observer's geodetic coordinates.
+                 * @param {object} sunEci The sun's ECI position vector.
+                 * @param {Date} date The current date/time.
+                 * @returns {boolean} True if it is dark.
+                 */
+                isObserverDark: function(observerGd, sunEci, date) {
+                    const gmst = satellite.gstime(date);
+                    const sunEcf = satellite.eciToEcf(sunEci, gmst);
+                    const lookAngles = satellite.ecfToLookAngles(observerGd, sunEcf);
+                    
+                    // Check if sun elevation is below the horizon (e.g., -6 degrees for civil twilight)
+                    return satellite.radiansToDegrees(lookAngles.elevation) < -6;
+                }
+            };
+
+            /**
+             * Converts azimuth in degrees to a compass direction string.
+             * @param {number} azimuth - Azimuth in degrees (0-360).
+             * @returns {string} Compass direction (e.g., N, NE, E).
+             */
+            function convertAzimuthToCompass(azimuth) {
+                const directions = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
+                const index = Math.round(azimuth / 22.5) % 16;
+                return directions[index];
+            }
+            
+            function calculateVisiblePasses() {
+                const observerGd = {
+                    longitude: satellite.degreesToRadians(observerLocation.lng),
+                    latitude: satellite.degreesToRadians(observerLocation.lat),
+                    height: observerLocation.alt
+                };
+
+                const passes = [];
+                const now = new Date();
+                const minutesToSearch = 7 * 24 * 60; // 7 days
+                const step = 60 * 1000; // 1 minute in milliseconds
+                let inPass = false;
+                let currentPass = {};
+
+                for (let i = 0; i < minutesToSearch; i++) {
+                    const time = new Date(now.getTime() + i * step);
+                    
+                    // Get satellite ECI position and velocity
+                    const positionAndVelocity = satellite.propagate(satrec, time);
+                    const positionEci = positionAndVelocity.position;
+                    
+                    // Get satellite look angles from observer
+                    const gmst = satellite.gstime(time);
+                    const positionEcf = satellite.eciToEcf(positionEci, gmst);
+                    const lookAngles = satellite.ecfToLookAngles(observerGd, positionEcf);
+                    
+                    const elevation = satellite.radiansToDegrees(lookAngles.elevation);
+                    const isAboveHorizon = elevation > 10; // Only consider passes with elevation > 10 degrees
+
+                    // Get sun position and check sunlight conditions using our new helpers
+                    const sunEci = satelliteHelpers.getSunEci(time);
+                    const isSatInSunlight = satelliteHelpers.isSatSunlit(positionEci, sunEci);
+                    const isObserverInDarkness = satelliteHelpers.isObserverDark(observerGd, sunEci, time);
+                    
+                    if (isAboveHorizon && isSatInSunlight && isObserverInDarkness) {
+                        if (!inPass) {
+                            // Start of a new pass
+                            inPass = true;
+                            currentPass = {
+                                start: {
+                                    time: time,
+                                    azimuth: satellite.radiansToDegrees(lookAngles.azimuth)
+                                },
+                                max: {
+                                    time: time,
+                                    elevation: elevation
+                                }
+                            };
+                        }
+
+                        // Update max elevation for the current pass
+                        if (elevation > currentPass.max.elevation) {
+                            currentPass.max.elevation = elevation;
+                            currentPass.max.time = time;
+                        }
+                    } else {
+                        if (inPass) {
+                            // End of the current pass
+                            inPass = false;
+                            currentPass.end = {
+                                time: time,
+                                azimuth: satellite.radiansToDegrees(lookAngles.azimuth)
+                            };
+                            passes.push(currentPass);
+                        }
+                    }
+                }
+                
+                return passes;
+            }
+
+            // --- INITIALIZATION ---
+            displayLocation();
+            const passes = calculateVisiblePasses();
+            displayPasses(passes);
+        });
+    </script>
+
+</body>
+</html>
