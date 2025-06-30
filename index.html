@@ -27,6 +27,16 @@
             transform: translateY(-2px);
             transition: all 0.3s ease;
         }
+        /* Style the select dropdown */
+        select {
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            appearance: none;
+            background-image: url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%239CA3AF%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E');
+            background-repeat: no-repeat;
+            background-position: right 0.7rem center;
+            background-size: 0.65rem auto;
+        }
     </style>
 </head>
 <body class="bg-gray-900 text-white antialiased">
@@ -49,17 +59,16 @@
                 </div>
             </div>
             <div>
-                <h2 class="text-xl font-bold text-gray-200 mb-2">Selected Satellite</h2>
-                <div id="satellite-info" class="text-violet-400 flex items-center space-x-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-6 h-6"><path d="m12 8-3.5 3.5 4 4L16 12l-4-4z"/><path d="m18 6-2.5 2.5"/><path d="m6 18 2.5-2.5"/><path d="m2 12 4 4"/><path d="m12 2 4 4"/><path d="M22 12h-4"/><path d="M12 22v-4"/><path d="M6 12H2"/></svg>
-                    <span>ISS (ZARYA)</span>
-                </div>
+                <h2 class="text-xl font-bold text-gray-200 mb-2">Select Satellite</h2>
+                <select id="satellite-select" class="w-full bg-gray-700 border border-gray-600 rounded-md p-2 text-white focus:outline-none focus:ring-2 focus:ring-violet-500">
+                    <!-- Options will be populated by JavaScript -->
+                </select>
             </div>
         </div>
 
         <!-- Passes Display Section -->
         <div>
-            <h2 class="text-2xl font-bold text-center mb-6 text-gray-200">Upcoming Visible Passes</h2>
+            <h2 id="passes-header" class="text-2xl font-bold text-center mb-6 text-gray-200">Upcoming Visible Passes</h2>
             <div id="passes-container" class="space-y-4">
                 <div id="loading-passes" class="text-center py-8">
                     <p class="text-lg text-gray-400">Waiting for location to calculate passes...</p>
@@ -79,7 +88,10 @@
         document.addEventListener('DOMContentLoaded', () => {
             // --- CONFIGURATION ---
             
-            // Default location if Geolocation fails: Park Forest Village, PA
+            // Store the current location globally once determined
+            let currentObserverLocation = null;
+
+            // Default location if Geolocation fails
             const defaultLocation = {
                 name: 'Park Forest Village, PA (Default)',
                 lat: 40.801,
@@ -87,14 +99,36 @@
                 alt: 0.410 // altitude in km
             };
             
-            // Satellite Two-Line Element (TLE) for the ISS (ZARYA)
-            const tleLine1 = '1 25544U 98067A   25181.54635115  .00016717  00000-0  30306-4 0  9999';
-            const tleLine2 = '2 25544  51.6416 251.4693 0006753  45.3412  69.2155 15.48934353 34659';
+            // TLE data for various satellites
+            const satellites = {
+                'iss': {
+                    name: 'ISS (ZARYA)',
+                    tle1: '1 25544U 98067A   25181.54635115  .00016717  00000-0  30306-4 0  9999',
+                    tle2: '2 25544  51.6416 251.4693 0006753  45.3412  69.2155 15.48934353 34659'
+                },
+                'tiangong': {
+                    name: 'TIANGONG',
+                    tle1: '1 48274U 21035A   25181.82288318  .00010978  00000-0  10118-3 0  9993',
+                    tle2: '2 48274  41.4975 221.5204 0002196 301.6713 173.8327 15.27559333174956'
+                },
+                'hst': {
+                    name: 'Hubble Space Telescope',
+                    tle1: '1 20580U 90037B   25181.38428587 -.00000133  00000-0  00000+0 0  9996',
+                    tle2: '2 20580  28.4692 149.3323 0001229  89.5494 270.5898 15.07412692842484'
+                }
+            };
 
-            // Initialize satellite record from TLE
-            const satrec = satellite.twoline2satrec(tleLine1, tleLine2);
-            
             // --- UI UPDATE FUNCTIONS ---
+            
+            function populateSatelliteSelector() {
+                const selectEl = document.getElementById('satellite-select');
+                for (const satId in satellites) {
+                    const option = document.createElement('option');
+                    option.value = satId;
+                    option.textContent = satellites[satId].name;
+                    selectEl.appendChild(option);
+                }
+            }
 
             function displayLocation(location) {
                 const locationEl = document.getElementById('location-text');
@@ -103,9 +137,7 @@
 
             function displayPasses(passes) {
                 const container = document.getElementById('passes-container');
-                
-                // Clear the "Calculating..." message
-                container.innerHTML = '';
+                container.innerHTML = ''; // Clear previous results or loading message
 
                 if (passes.length === 0) {
                     container.innerHTML = `<div class="text-center py-8 bg-gray-800 rounded-lg"><p class="text-lg text-gray-400">No visible passes found in the next 7 days.</p></div>`;
@@ -114,10 +146,8 @@
 
                 passes.forEach(pass => {
                     const duration = Math.round((pass.end.time - pass.start.time) / 60000);
-                    
                     const card = document.createElement('div');
                     card.className = 'pass-card bg-gray-800 rounded-lg p-4 shadow-md border border-gray-700 transition-all duration-300';
-                    
                     const formattedDate = new Intl.DateTimeFormat('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }).format(pass.start.time);
                     const formattedStartTime = pass.start.time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
 
@@ -133,18 +163,9 @@
                             </div>
                         </div>
                         <div class="mt-4 pt-4 border-t border-gray-700 grid grid-cols-3 gap-2 text-center">
-                            <div>
-                                <p class="text-lg font-semibold">${convertAzimuthToCompass(pass.start.azimuth)}</p>
-                                <p class="text-sm text-gray-400">Appears</p>
-                            </div>
-                            <div>
-                                <p class="text-lg font-semibold">${duration} min</p>
-                                <p class="text-sm text-gray-400">Visible</p>
-                            </div>
-                            <div>
-                                <p class="text-lg font-semibold">${convertAzimuthToCompass(pass.end.azimuth)}</p>
-                                <p class="text-sm text-gray-400">Disappears</p>
-                            </div>
+                            <div><p class="text-lg font-semibold">${convertAzimuthToCompass(pass.start.azimuth)}</p><p class="text-sm text-gray-400">Appears</p></div>
+                            <div><p class="text-lg font-semibold">${duration} min</p><p class="text-sm text-gray-400">Visible</p></div>
+                            <div><p class="text-lg font-semibold">${convertAzimuthToCompass(pass.end.azimuth)}</p><p class="text-sm text-gray-400">Disappears</p></div>
                         </div>
                     `;
                     container.appendChild(card);
@@ -153,57 +174,27 @@
 
             // --- CALCULATION LOGIC ---
 
-            const satelliteHelpers = {
-                earthRadius: 6378.137,
-                getSunEci: function(date) {
-                    const j2000 = 2451545.0;
-                    const julianDate = (date.getTime() / 86400000) + 2440587.5;
-                    const daysSince2000 = julianDate - j2000;
-                    const meanLongitude = (280.460 + 0.9856474 * daysSince2000) % 360;
-                    const meanAnomaly = (357.528 + 0.9856003 * daysSince2000) % 360;
-                    const eclipticLongitude = meanLongitude + 1.915 * Math.sin(satellite.degreesToRadians(meanAnomaly)) + 0.020 * Math.sin(satellite.degreesToRadians(2 * meanAnomaly));
-                    const obliquity = 23.439 - 0.0000004 * daysSince2000;
-                    const distance = 149597870.7;
-                    const lonRad = satellite.degreesToRadians(eclipticLongitude);
-                    const oblRad = satellite.degreesToRadians(obliquity);
-                    const x = distance * Math.cos(lonRad);
-                    const y = distance * Math.sin(lonRad) * Math.cos(oblRad);
-                    const z = distance * Math.sin(lonRad) * Math.sin(oblRad);
-                    return { x, y, z };
-                },
-                isSatSunlit: function(satEci, sunEci) {
-                    const r_sat = [satEci.x, satEci.y, satEci.z];
-                    const r_sun = [sunEci.x, sunEci.y, sunEci.z];
-                    const dot_product = r_sat[0] * r_sun[0] + r_sat[1] * r_sun[1] + r_sat[2] * r_sun[2];
-                    if (dot_product > 0) return true;
-                    const r_sat_mag_sq = r_sat[0]**2 + r_sat[1]**2 + r_sat[2]**2;
-                    const proj_of_sat_on_sun = dot_product / Math.sqrt(r_sun[0]**2 + r_sun[1]**2 + r_sun[2]**2);
-                    const a = r_sat_mag_sq - proj_of_sat_on_sun**2;
-                    const b = this.earthRadius**2;
-                    return a > b;
-                },
-                isObserverDark: function(observerGd, sunEci, date) {
-                    const gmst = satellite.gstime(date);
-                    const sunEcf = satellite.eciToEcf(sunEci, gmst);
-                    const lookAngles = satellite.ecfToLookAngles(observerGd, sunEcf);
-                    return satellite.radiansToDegrees(lookAngles.elevation) < -6;
-                }
-            };
+            const satelliteHelpers = { /* ... (same as before) ... */ };
+            // (Helper functions are omitted for brevity, but are unchanged from the previous version)
+            satelliteHelpers.earthRadius = 6378.137;
+            satelliteHelpers.getSunEci = function(date) { const j2000=2451545.0,julianDate=(date.getTime()/864e5)+2440587.5,daysSince2000=julianDate-j2000,meanLongitude=(280.46+0.9856474*daysSince2000)%360,meanAnomaly=(357.528+0.9856003*daysSince2000)%360,eclipticLongitude=meanLongitude+1.915*Math.sin(satellite.degreesToRadians(meanAnomaly))+0.02*Math.sin(satellite.degreesToRadians(2*meanAnomaly)),obliquity=23.439-4e-7*daysSince2000,distance=149597870.7,lonRad=satellite.degreesToRadians(eclipticLongitude),oblRad=satellite.degreesToRadians(obliquity);return{x:distance*Math.cos(lonRad),y:distance*Math.sin(lonRad)*Math.cos(oblRad),z:distance*Math.sin(lonRad)*Math.sin(oblRad)}; };
+            satelliteHelpers.isSatSunlit = function(satEci, sunEci) { const r_sat=[satEci.x,satEci.y,satEci.z],r_sun=[sunEci.x,sunEci.y,sunEci.z],dot_product=r_sat[0]*r_sun[0]+r_sat[1]*r_sun[1]+r_sat[2]*r_sun[2];if(dot_product>0)return!0;const r_sat_mag_sq=r_sat[0]**2+r_sat[1]**2+r_sat[2]**2,proj_of_sat_on_sun=dot_product/Math.sqrt(r_sun[0]**2+r_sun[1]**2+r_sun[2]**2);return r_sat_mag_sq-proj_of_sat_on_sun**2>this.earthRadius**2; };
+            satelliteHelpers.isObserverDark = function(observerGd, sunEci, date) { const gmst=satellite.gstime(date),sunEcf=satellite.eciToEcf(sunEci,gmst),lookAngles=satellite.ecfToLookAngles(observerGd,sunEcf);return satellite.radiansToDegrees(lookAngles.elevation)<-6; };
+
 
             function convertAzimuthToCompass(azimuth) {
                 const directions = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
-                const index = Math.round(azimuth / 22.5) % 16;
-                return directions[index];
+                return directions[Math.round(azimuth / 22.5) % 16];
             }
             
-            function calculateAndDisplayPasses(observerLocation) {
-                displayLocation(observerLocation);
-                
+            function calculateAndDisplayPasses(satId, observerLocation) {
+                const selectedSat = satellites[satId];
+                document.getElementById('passes-header').textContent = `Upcoming Passes for ${selectedSat.name}`;
                 const passesContainer = document.getElementById('passes-container');
-                passesContainer.innerHTML = `<div id="loading-passes" class="text-center py-8"><p class="text-lg text-gray-400">Calculating passes for your location...</p></div>`;
+                passesContainer.innerHTML = `<div id="loading-passes" class="text-center py-8"><p class="text-lg text-gray-400">Calculating passes...</p></div>`;
 
-                // Run calculation in a timeout to allow the UI to update first
                 setTimeout(() => {
+                    const satrec = satellite.twoline2satrec(selectedSat.tle1, selectedSat.tle2);
                     const observerGd = {
                         longitude: satellite.degreesToRadians(observerLocation.lng),
                         latitude: satellite.degreesToRadians(observerLocation.lat),
@@ -220,61 +211,76 @@
                     for (let i = 0; i < minutesToSearch; i++) {
                         const time = new Date(now.getTime() + i * step);
                         const positionAndVelocity = satellite.propagate(satrec, time);
-                        const positionEci = positionAndVelocity.position;
-                        const gmst = satellite.gstime(time);
-                        const positionEcf = satellite.eciToEcf(positionEci, gmst);
-                        const lookAngles = satellite.ecfToLookAngles(observerGd, positionEcf);
-                        const elevation = satellite.radiansToDegrees(lookAngles.elevation);
-                        const isAboveHorizon = elevation > 10;
-                        const sunEci = satelliteHelpers.getSunEci(time);
-                        const isSatInSunlight = satelliteHelpers.isSatSunlit(positionEci, sunEci);
-                        const isObserverInDarkness = satelliteHelpers.isObserverDark(observerGd, sunEci, time);
-                        
-                        if (isAboveHorizon && isSatInSunlight && isObserverInDarkness) {
-                            if (!inPass) {
-                                inPass = true;
-                                currentPass = {
-                                    start: { time: time, azimuth: satellite.radiansToDegrees(lookAngles.azimuth) },
-                                    max: { time: time, elevation: elevation }
-                                };
-                            }
-                            if (elevation > currentPass.max.elevation) {
-                                currentPass.max.elevation = elevation;
-                                currentPass.max.time = time;
-                            }
-                        } else {
-                            if (inPass) {
-                                inPass = false;
-                                currentPass.end = { time: time, azimuth: satellite.radiansToDegrees(lookAngles.azimuth) };
-                                passes.push(currentPass);
+                        if (positionAndVelocity.position) {
+                            const positionEci = positionAndVelocity.position;
+                            const gmst = satellite.gstime(time);
+                            const positionEcf = satellite.eciToEcf(positionEci, gmst);
+                            const lookAngles = satellite.ecfToLookAngles(observerGd, positionEcf);
+                            const elevation = satellite.radiansToDegrees(lookAngles.elevation);
+                            const isAboveHorizon = elevation > 10;
+                            const sunEci = satelliteHelpers.getSunEci(time);
+                            const isSatInSunlight = satelliteHelpers.isSatSunlit(positionEci, sunEci);
+                            const isObserverInDarkness = satelliteHelpers.isObserverDark(observerGd, sunEci, time);
+                            
+                            if (isAboveHorizon && isSatInSunlight && isObserverInDarkness) {
+                                if (!inPass) {
+                                    inPass = true;
+                                    currentPass = {
+                                        start: { time: time, azimuth: satellite.radiansToDegrees(lookAngles.azimuth) },
+                                        max: { time: time, elevation: elevation }
+                                    };
+                                }
+                                if (elevation > currentPass.max.elevation) {
+                                    currentPass.max.elevation = elevation;
+                                    currentPass.max.time = time;
+                                }
+                            } else {
+                                if (inPass) {
+                                    inPass = false;
+                                    currentPass.end = { time: time, azimuth: satellite.radiansToDegrees(lookAngles.azimuth) };
+                                    passes.push(currentPass);
+                                }
                             }
                         }
                     }
                     displayPasses(passes);
-                }, 50); // Small delay to show "Calculating..."
+                }, 50);
             }
 
             // --- INITIALIZATION ---
             function initializeApp() {
+                populateSatelliteSelector();
+
+                document.getElementById('satellite-select').addEventListener('change', (e) => {
+                    if (currentObserverLocation) {
+                        calculateAndDisplayPasses(e.target.value, currentObserverLocation);
+                    }
+                });
+
                 if ('geolocation' in navigator) {
                     navigator.geolocation.getCurrentPosition(
                         (position) => {
-                            const userLocation = {
+                            currentObserverLocation = {
                                 name: 'Your Current Location',
                                 lat: position.coords.latitude,
                                 lng: position.coords.longitude,
-                                alt: position.coords.altitude ? position.coords.altitude / 1000 : 0 // convert meters to km
+                                alt: position.coords.altitude ? position.coords.altitude / 1000 : 0
                             };
-                            calculateAndDisplayPasses(userLocation);
+                            displayLocation(currentObserverLocation);
+                            calculateAndDisplayPasses(document.getElementById('satellite-select').value, currentObserverLocation);
                         },
                         (error) => {
                             console.warn(`Geolocation error (${error.code}): ${error.message}`);
-                            calculateAndDisplayPasses(defaultLocation);
+                            currentObserverLocation = defaultLocation;
+                            displayLocation(currentObserverLocation);
+                            calculateAndDisplayPasses(document.getElementById('satellite-select').value, currentObserverLocation);
                         }
                     );
                 } else {
                     console.warn("Geolocation is not supported by this browser.");
-                    calculateAndDisplayPasses(defaultLocation);
+                    currentObserverLocation = defaultLocation;
+                    displayLocation(currentObserverLocation);
+                    calculateAndDisplayPasses(document.getElementById('satellite-select').value, currentObserverLocation);
                 }
             }
 
