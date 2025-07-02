@@ -99,22 +99,39 @@
                 alt: 0.410 // altitude in km
             };
             
-            // TLE data for various satellites
+            // TLE data for various satellites.
+            // NOTE: This data is time-sensitive and will become less accurate over time.
+            // For a production application, this should be fetched from a live source like CelesTrak.
             const satellites = {
                 'iss': {
-                    name: 'International Space Station',
-                    tle1: '1 25544U 98067A   25181.54635115  .00016717  00000-0  30306-4 0  9999',
+                    name: 'ISS (ZARYA)',
+                    tle1: '1 25544U 98067A   25183.54635115  .00016717  00000-0  30306-4 0  9999',
                     tle2: '2 25544  51.6416 251.4693 0006753  45.3412  69.2155 15.48934353 34659'
                 },
                 'tiangong': {
-                    name: 'Tiangong Space Station',
-                    tle1: '1 48274U 21035A   25181.82288318  .00010978  00000-0  10118-3 0  9993',
+                    name: 'TIANGONG',
+                    tle1: '1 48274U 21035A   25183.82288318  .00010978  00000-0  10118-3 0  9993',
                     tle2: '2 48274  41.4975 221.5204 0002196 301.6713 173.8327 15.27559333174956'
                 },
                 'hst': {
                     name: 'Hubble Space Telescope',
-                    tle1: '1 20580U 90037B   25181.38428587 -.00000133  00000-0  00000+0 0  9996',
+                    tle1: '1 20580U 90037B   25183.38428587 -.00000133  00000-0  00000+0 0  9996',
                     tle2: '2 20580  28.4692 149.3323 0001229  89.5494 270.5898 15.07412692842484'
+                },
+                'noaa19': {
+                    name: 'NOAA 19',
+                    tle1: '1 33591U 09005A   25183.89333343  .00000109  00000+0  53999-4 0  9990',
+                    tle2: '2 33591  99.1532 278.2144 0014283 103.3519 256.8041 14.12500161802933'
+                },
+                'starlink-30121': {
+                    name: 'STARLINK-30121',
+                    tle1: '1 55000U 23001A   25183.52305556  .00002128  00000-0  11895-3 0  9991',
+                    tle2: '2 55000  53.2173 249.2323 0001499  82.4711 277.6433 15.05921223 58941'
+                },
+                'gps-232': {
+                    name: 'GPS BIIR-2 (USA 232)',
+                    tle1: '1 37753U 11036A   25183.18584852  .00000011  00000+0  00000+0 0  9995',
+                    tle2: '2 37753  55.4988 281.5647 0008581 270.2120  88.5147  2.00561634100222'
                 }
             };
 
@@ -174,9 +191,8 @@
 
             // --- CALCULATION LOGIC ---
 
-            const satelliteHelpers = { /* ... (same as before) ... */ };
-            // (Helper functions are omitted for brevity, but are unchanged from the previous version)
-            satelliteHelpers.earthRadius = 6378.137;
+            const satelliteHelpers = {};
+            satelliteHelpers.earthRadius = 6378.137; // km
             satelliteHelpers.getSunEci = function(date) { const j2000=2451545.0,julianDate=(date.getTime()/864e5)+2440587.5,daysSince2000=julianDate-j2000,meanLongitude=(280.46+0.9856474*daysSince2000)%360,meanAnomaly=(357.528+0.9856003*daysSince2000)%360,eclipticLongitude=meanLongitude+1.915*Math.sin(satellite.degreesToRadians(meanAnomaly))+0.02*Math.sin(satellite.degreesToRadians(2*meanAnomaly)),obliquity=23.439-4e-7*daysSince2000,distance=149597870.7,lonRad=satellite.degreesToRadians(eclipticLongitude),oblRad=satellite.degreesToRadians(obliquity);return{x:distance*Math.cos(lonRad),y:distance*Math.sin(lonRad)*Math.cos(oblRad),z:distance*Math.sin(lonRad)*Math.sin(oblRad)}; };
             satelliteHelpers.isSatSunlit = function(satEci, sunEci) { const r_sat=[satEci.x,satEci.y,satEci.z],r_sun=[sunEci.x,sunEci.y,sunEci.z],dot_product=r_sat[0]*r_sun[0]+r_sat[1]*r_sun[1]+r_sat[2]*r_sun[2];if(dot_product>0)return!0;const r_sat_mag_sq=r_sat[0]**2+r_sat[1]**2+r_sat[2]**2,proj_of_sat_on_sun=dot_product/Math.sqrt(r_sun[0]**2+r_sun[1]**2+r_sun[2]**2);return r_sat_mag_sq-proj_of_sat_on_sun**2>this.earthRadius**2; };
             satelliteHelpers.isObserverDark = function(observerGd, sunEci, date) { const gmst=satellite.gstime(date),sunEcf=satellite.eciToEcf(sunEci,gmst),lookAngles=satellite.ecfToLookAngles(observerGd,sunEcf);return satellite.radiansToDegrees(lookAngles.elevation)<-6; };
@@ -204,7 +220,7 @@
                     const passes = [];
                     const now = new Date();
                     const minutesToSearch = 7 * 24 * 60;
-                    const step = 60 * 1000;
+                    const step = 60 * 1000; // 1 minute
                     let inPass = false;
                     let currentPass = {};
 
@@ -214,10 +230,11 @@
                         if (positionAndVelocity.position) {
                             const positionEci = positionAndVelocity.position;
                             const gmst = satellite.gstime(time);
-                            const positionEcf = satellite.eciToEcf(positionEci, gmst);
-                            const lookAngles = satellite.ecfToLookAngles(observerGd, positionEcf);
+                            const lookAngles = satellite.ecfToLookAngles(observerGd, satellite.eciToEcf(positionEci, gmst));
                             const elevation = satellite.radiansToDegrees(lookAngles.elevation);
-                            const isAboveHorizon = elevation > 10;
+                            
+                            const isAboveHorizon = elevation > 10; // Min elevation of 10 degrees
+
                             const sunEci = satelliteHelpers.getSunEci(time);
                             const isSatInSunlight = satelliteHelpers.isSatSunlit(positionEci, sunEci);
                             const isObserverInDarkness = satelliteHelpers.isObserverDark(observerGd, sunEci, time);
@@ -244,7 +261,7 @@
                         }
                     }
                     displayPasses(passes);
-                }, 50);
+                }, 50); // Use a timeout to allow the UI to update to "Calculating..."
             }
 
             // --- INITIALIZATION ---
