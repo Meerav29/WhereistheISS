@@ -85,66 +85,175 @@
     </div>
 
     <script>
-        document.addEventListener('DOMContentLoaded', () => {
+        document.addEventListener('DOMContentLoaded', async () => {
             // --- CONFIGURATION ---
-            
-            // Store the current location globally once determined
+
             let currentObserverLocation = null;
 
-            // Default location if Geolocation fails
             const defaultLocation = {
                 name: 'Park Forest Village, PA (Default)',
                 lat: 40.801,
                 lng: -77.909,
                 alt: 0.410 // altitude in km
             };
-            
-            // TLE data for various satellites.
-            // NOTE: This data is time-sensitive and will become less accurate over time.
-            // For a production application, this should be fetched from a live source like CelesTrak.
-            const satellites = {
-                'iss': {
-                    name: 'ISS (ZARYA)',
-                    tle1: '1 25544U 98067A   25183.54635115  .00016717  00000-0  30306-4 0  9999',
-                    tle2: '2 25544  51.6416 251.4693 0006753  45.3412  69.2155 15.48934353 34659'
-                },
-                'tiangong': {
-                    name: 'TIANGONG',
-                    tle1: '1 48274U 21035A   25183.82288318  .00010978  00000-0  10118-3 0  9993',
-                    tle2: '2 48274  41.4975 221.5204 0002196 301.6713 173.8327 15.27559333174956'
-                },
-                'hst': {
-                    name: 'Hubble Space Telescope',
-                    tle1: '1 20580U 90037B   25183.38428587 -.00000133  00000-0  00000+0 0  9996',
-                    tle2: '2 20580  28.4692 149.3323 0001229  89.5494 270.5898 15.07412692842484'
-                },
-                'noaa19': {
-                    name: 'NOAA 19',
-                    tle1: '1 33591U 09005A   25183.89333343  .00000109  00000+0  53999-4 0  9990',
-                    tle2: '2 33591  99.1532 278.2144 0014283 103.3519 256.8041 14.12500161802933'
-                },
-                'starlink-30121': {
-                    name: 'STARLINK-30121',
-                    tle1: '1 55000U 23001A   25183.52305556  .00002128  00000-0  11895-3 0  9991',
-                    tle2: '2 55000  53.2173 249.2323 0001499  82.4711 277.6433 15.05921223 58941'
-                },
-                'gps-232': {
-                    name: 'GPS BIIR-2 (USA 232)',
-                    tle1: '1 37753U 11036A   25183.18584852  .00000011  00000+0  00000+0 0  9995',
-                    tle2: '2 37753  55.4988 281.5647 0008581 270.2120  88.5147  2.00561634100222'
+
+            const REFRESH_INTERVAL_MS = 12 * 60 * 60 * 1000; // 12 hours
+            const LOCAL_STORAGE_KEY = 'satelliteTleCache';
+
+            const satelliteMetadata = [
+                { id: 'iss', name: 'ISS (ZARYA)', noradId: 25544 },
+                { id: 'tiangong', name: 'TIANGONG', noradId: 48274 },
+                { id: 'hst', name: 'Hubble Space Telescope', noradId: 20580 },
+                { id: 'noaa19', name: 'NOAA 19', noradId: 33591 },
+                { id: 'starlink-30121', name: 'STARLINK-30121', noradId: 55000 },
+                { id: 'gps-232', name: 'GPS BIIR-2 (USA 232)', noradId: 37753 }
+            ];
+
+            const satellites = {};
+            let satelliteList = [];
+
+            const selectEl = document.getElementById('satellite-select');
+            selectEl.disabled = true;
+            selectEl.innerHTML = '<option>Loading satellites…</option>';
+
+            const toastContainer = createToastContainer();
+
+            let localStorageAvailable = true;
+            let tleCache = loadCache();
+
+            // --- DATA HELPERS ---
+
+            function createToastContainer() {
+                const container = document.createElement('div');
+                container.id = 'toast-container';
+                container.className = 'fixed top-4 right-4 space-y-2 z-50';
+                document.body.appendChild(container);
+                return container;
+            }
+
+            function showToast(message, type = 'info', duration = 6000) {
+                if (!toastContainer) return;
+                const toast = document.createElement('div');
+                const baseClasses = 'px-4 py-3 rounded-lg shadow-lg text-sm transition-opacity duration-300';
+                const typeClasses = {
+                    info: 'bg-slate-700/90 text-white backdrop-blur',
+                    success: 'bg-emerald-600/90 text-white backdrop-blur',
+                    warning: 'bg-amber-500/90 text-gray-900 backdrop-blur',
+                    error: 'bg-rose-600/90 text-white backdrop-blur'
+                };
+                toast.className = `${baseClasses} ${typeClasses[type] || typeClasses.info}`;
+                toast.textContent = message;
+                toastContainer.appendChild(toast);
+                setTimeout(() => {
+                    toast.classList.add('opacity-0');
+                    setTimeout(() => toast.remove(), 300);
+                }, duration);
+            }
+
+            function loadCache() {
+                if (!localStorageAvailable) return {};
+                try {
+                    const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
+                    if (!raw) return {};
+                    const parsed = JSON.parse(raw);
+                    return typeof parsed === 'object' && parsed !== null ? parsed : {};
+                } catch (error) {
+                    console.warn('Unable to load TLE cache from localStorage:', error);
+                    localStorageAvailable = false;
+                    showToast('Local storage is unavailable; live TLEs will not be cached.', 'warning');
+                    return {};
                 }
-            };
+            }
+
+            function persistCache() {
+                if (!localStorageAvailable) return;
+                try {
+                    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(tleCache));
+                } catch (error) {
+                    console.warn('Unable to persist TLE cache to localStorage:', error);
+                    localStorageAvailable = false;
+                    showToast('Unable to persist TLE cache; future fetches may be slower.', 'warning');
+                }
+            }
+
+            async function fetchTle(noradId) {
+                const url = `https://celestrak.org/NORAD/elements/gp.php?CATNR=${encodeURIComponent(noradId)}&FORMAT=TLE`;
+                const response = await fetch(url, { cache: 'no-cache' });
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                const text = await response.text();
+                const lines = text
+                    .trim()
+                    .split(/\r?\n/)
+                    .map((line) => line.trim())
+                    .filter(Boolean);
+                const firstLineIndex = lines.findIndex((line) => line.startsWith('1 '));
+                if (firstLineIndex === -1 || firstLineIndex + 1 >= lines.length) {
+                    throw new Error('Invalid TLE response');
+                }
+                const tle1 = lines[firstLineIndex];
+                const tle2 = lines[firstLineIndex + 1];
+                if (!tle1.startsWith('1 ') || !tle2.startsWith('2 ')) {
+                    throw new Error('Malformed TLE data');
+                }
+                return { tle1, tle2 };
+            }
+
+            function isCacheFresh(entry) {
+                return Date.now() - entry.timestamp < REFRESH_INTERVAL_MS;
+            }
+
+            async function resolveSatelliteTle(metadata) {
+                const cachedEntry = tleCache[metadata.id];
+                if (cachedEntry && isCacheFresh(cachedEntry)) {
+                    return { ...metadata, tle1: cachedEntry.tle1, tle2: cachedEntry.tle2, lastUpdated: cachedEntry.timestamp };
+                }
+
+                try {
+                    const { tle1, tle2 } = await fetchTle(metadata.noradId);
+                    const entry = { tle1, tle2, timestamp: Date.now() };
+                    tleCache[metadata.id] = entry;
+                    persistCache();
+                    return { ...metadata, tle1, tle2, lastUpdated: entry.timestamp };
+                } catch (error) {
+                    if (cachedEntry) {
+                        showToast(`Live TLE fetch for ${metadata.name} failed; using cached data from ${new Date(cachedEntry.timestamp).toLocaleString()}.`, 'warning');
+                        return { ...metadata, tle1: cachedEntry.tle1, tle2: cachedEntry.tle2, lastUpdated: cachedEntry.timestamp, stale: true };
+                    }
+                    throw new Error(`Failed to fetch TLE for ${metadata.name}: ${error.message}`);
+                }
+            }
+
+            async function loadAllSatellites() {
+                const results = await Promise.all(
+                    satelliteMetadata.map(async (metadata) => {
+                        try {
+                            return await resolveSatelliteTle(metadata);
+                        } catch (error) {
+                            console.error(error);
+                            showToast(error.message, 'error');
+                            return null;
+                        }
+                    })
+                );
+                return results.filter(Boolean);
+            }
 
             // --- UI UPDATE FUNCTIONS ---
-            
-            function populateSatelliteSelector() {
-                const selectEl = document.getElementById('satellite-select');
-                for (const satId in satellites) {
+
+            function populateSatelliteSelector(list) {
+                selectEl.innerHTML = '';
+                list.forEach((sat, index) => {
                     const option = document.createElement('option');
-                    option.value = satId;
-                    option.textContent = satellites[satId].name;
+                    option.value = sat.id;
+                    option.textContent = sat.name;
                     selectEl.appendChild(option);
-                }
+                    if (index === 0) {
+                        selectEl.value = sat.id;
+                    }
+                });
+                selectEl.disabled = false;
             }
 
             function displayLocation(location) {
@@ -154,7 +263,7 @@
 
             function displayPasses(passes) {
                 const container = document.getElementById('passes-container');
-                container.innerHTML = ''; // Clear previous results or loading message
+                container.innerHTML = '';
 
                 if (passes.length === 0) {
                     container.innerHTML = `<div class="text-center py-8 bg-gray-800 rounded-lg"><p class="text-lg text-gray-400">No visible passes found in the next 7 days.</p></div>`;
@@ -202,73 +311,98 @@
                 const directions = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
                 return directions[Math.round(azimuth / 22.5) % 16];
             }
-            
+
             function calculateAndDisplayPasses(satId, observerLocation) {
                 const selectedSat = satellites[satId];
-                document.getElementById('passes-header').textContent = `Upcoming Passes for ${selectedSat.name}`;
+                const headerEl = document.getElementById('passes-header');
                 const passesContainer = document.getElementById('passes-container');
+
+                if (!selectedSat || !selectedSat.tle1 || !selectedSat.tle2) {
+                    headerEl.textContent = 'Upcoming Visible Passes';
+                    passesContainer.innerHTML = `<div class="text-center py-8 bg-gray-800 rounded-lg"><p class="text-lg text-gray-400">TLE data is unavailable for the selected satellite.</p></div>`;
+                    return;
+                }
+
+                const lastUpdatedText = selectedSat.lastUpdated ? new Date(selectedSat.lastUpdated).toLocaleString() : 'Unknown';
+                headerEl.innerHTML = `Upcoming Passes for ${selectedSat.name}<span class="block text-sm text-gray-400">TLE updated ${lastUpdatedText}</span>`;
                 passesContainer.innerHTML = `<div id="loading-passes" class="text-center py-8"><p class="text-lg text-gray-400">Calculating passes...</p></div>`;
 
                 setTimeout(() => {
-                    const satrec = satellite.twoline2satrec(selectedSat.tle1, selectedSat.tle2);
-                    const observerGd = {
-                        longitude: satellite.degreesToRadians(observerLocation.lng),
-                        latitude: satellite.degreesToRadians(observerLocation.lat),
-                        height: observerLocation.alt
-                    };
+                    try {
+                        const satrec = satellite.twoline2satrec(selectedSat.tle1, selectedSat.tle2);
+                        const observerGd = {
+                            longitude: satellite.degreesToRadians(observerLocation.lng),
+                            latitude: satellite.degreesToRadians(observerLocation.lat),
+                            height: observerLocation.alt
+                        };
 
-                    const passes = [];
-                    const now = new Date();
-                    const minutesToSearch = 7 * 24 * 60;
-                    const step = 60 * 1000; // 1 minute
-                    let inPass = false;
-                    let currentPass = {};
+                        const passes = [];
+                        const now = new Date();
+                        const minutesToSearch = 7 * 24 * 60;
+                        const step = 60 * 1000; // 1 minute
+                        let inPass = false;
+                        let currentPass = {};
 
-                    for (let i = 0; i < minutesToSearch; i++) {
-                        const time = new Date(now.getTime() + i * step);
-                        const positionAndVelocity = satellite.propagate(satrec, time);
-                        if (positionAndVelocity.position) {
-                            const positionEci = positionAndVelocity.position;
-                            const gmst = satellite.gstime(time);
-                            const lookAngles = satellite.ecfToLookAngles(observerGd, satellite.eciToEcf(positionEci, gmst));
-                            const elevation = satellite.radiansToDegrees(lookAngles.elevation);
-                            
-                            const isAboveHorizon = elevation > 10; // Min elevation of 10 degrees
+                        for (let i = 0; i < minutesToSearch; i++) {
+                            const time = new Date(now.getTime() + i * step);
+                            const positionAndVelocity = satellite.propagate(satrec, time);
+                            if (positionAndVelocity.position) {
+                                const positionEci = positionAndVelocity.position;
+                                const gmst = satellite.gstime(time);
+                                const lookAngles = satellite.ecfToLookAngles(observerGd, satellite.eciToEcf(positionEci, gmst));
+                                const elevation = satellite.radiansToDegrees(lookAngles.elevation);
 
-                            const sunEci = satelliteHelpers.getSunEci(time);
-                            const isSatInSunlight = satelliteHelpers.isSatSunlit(positionEci, sunEci);
-                            const isObserverInDarkness = satelliteHelpers.isObserverDark(observerGd, sunEci, time);
-                            
-                            if (isAboveHorizon && isSatInSunlight && isObserverInDarkness) {
-                                if (!inPass) {
-                                    inPass = true;
-                                    currentPass = {
-                                        start: { time: time, azimuth: satellite.radiansToDegrees(lookAngles.azimuth) },
-                                        max: { time: time, elevation: elevation }
-                                    };
-                                }
-                                if (elevation > currentPass.max.elevation) {
-                                    currentPass.max.elevation = elevation;
-                                    currentPass.max.time = time;
-                                }
-                            } else {
-                                if (inPass) {
-                                    inPass = false;
-                                    currentPass.end = { time: time, azimuth: satellite.radiansToDegrees(lookAngles.azimuth) };
-                                    passes.push(currentPass);
+                                const isAboveHorizon = elevation > 10; // Min elevation of 10 degrees
+
+                                const sunEci = satelliteHelpers.getSunEci(time);
+                                const isSatInSunlight = satelliteHelpers.isSatSunlit(positionEci, sunEci);
+                                const isObserverInDarkness = satelliteHelpers.isObserverDark(observerGd, sunEci, time);
+
+                                if (isAboveHorizon && isSatInSunlight && isObserverInDarkness) {
+                                    if (!inPass) {
+                                        inPass = true;
+                                        currentPass = {
+                                            start: { time: time, azimuth: satellite.radiansToDegrees(lookAngles.azimuth) },
+                                            max: { time: time, elevation: elevation }
+                                        };
+                                    }
+                                    if (elevation > currentPass.max.elevation) {
+                                        currentPass.max.elevation = elevation;
+                                        currentPass.max.time = time;
+                                    }
+                                } else {
+                                    if (inPass) {
+                                        inPass = false;
+                                        currentPass.end = { time: time, azimuth: satellite.radiansToDegrees(lookAngles.azimuth) };
+                                        passes.push(currentPass);
+                                    }
                                 }
                             }
                         }
+                        displayPasses(passes);
+                    } catch (error) {
+                        console.error('Failed to calculate passes:', error);
+                        showToast('Unable to calculate passes for the selected satellite.', 'error');
+                        passesContainer.innerHTML = `<div class="text-center py-8 bg-gray-800 rounded-lg"><p class="text-lg text-gray-400">Unable to calculate passes. Please try again later.</p></div>`;
                     }
-                    displayPasses(passes);
-                }, 50); // Use a timeout to allow the UI to update to "Calculating..."
+                }, 50);
             }
 
             // --- INITIALIZATION ---
-            function initializeApp() {
-                populateSatelliteSelector();
+            async function initializeApp() {
+                satelliteList = await loadAllSatellites();
+                if (satelliteList.length === 0) {
+                    selectEl.innerHTML = '<option>Satellite data unavailable</option>';
+                    document.getElementById('passes-container').innerHTML = `<div class="text-center py-8 bg-gray-800 rounded-lg"><p class="text-lg text-gray-400">Unable to load satellite data. Please refresh the page.</p></div>`;
+                    return;
+                }
 
-                document.getElementById('satellite-select').addEventListener('change', (e) => {
+                satelliteList.forEach((sat) => {
+                    satellites[sat.id] = sat;
+                });
+                populateSatelliteSelector(satelliteList);
+
+                selectEl.addEventListener('change', (e) => {
                     if (currentObserverLocation) {
                         calculateAndDisplayPasses(e.target.value, currentObserverLocation);
                     }
@@ -284,24 +418,34 @@
                                 alt: position.coords.altitude ? position.coords.altitude / 1000 : 0
                             };
                             displayLocation(currentObserverLocation);
-                            calculateAndDisplayPasses(document.getElementById('satellite-select').value, currentObserverLocation);
+                            const satId = selectEl.value || satelliteList[0].id;
+                            calculateAndDisplayPasses(satId, currentObserverLocation);
                         },
                         (error) => {
                             console.warn(`Geolocation error (${error.code}): ${error.message}`);
                             currentObserverLocation = defaultLocation;
                             displayLocation(currentObserverLocation);
-                            calculateAndDisplayPasses(document.getElementById('satellite-select').value, currentObserverLocation);
+                            showToast('Using default location because geolocation was denied or unavailable.', 'warning');
+                            const satId = selectEl.value || satelliteList[0].id;
+                            calculateAndDisplayPasses(satId, currentObserverLocation);
                         }
                     );
                 } else {
-                    console.warn("Geolocation is not supported by this browser.");
+                    console.warn('Geolocation is not supported by this browser.');
                     currentObserverLocation = defaultLocation;
                     displayLocation(currentObserverLocation);
-                    calculateAndDisplayPasses(document.getElementById('satellite-select').value, currentObserverLocation);
+                    showToast('Geolocation is not supported; using the default location.', 'warning');
+                    const satId = selectEl.value || satelliteList[0].id;
+                    calculateAndDisplayPasses(satId, currentObserverLocation);
                 }
             }
 
-            initializeApp();
+            try {
+                await initializeApp();
+            } catch (error) {
+                console.error('Initialization failed:', error);
+                showToast('Failed to initialize the application. Please refresh and try again.', 'error');
+            }
         });
     </script>
 

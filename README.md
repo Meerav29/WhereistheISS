@@ -11,6 +11,7 @@ A lightweight, browser-based tool that tells you when selected satellites will b
 - **Satellite selection**: Choose from International Space Station, Tiangong Space Station and Hubble Space Telescope.
 - **Visible-pass calculation**: Finds passes where the satellite is above 10° elevation, in sunlight, while you are in darkness.
 - **Clean, responsive UI**: Styled with Tailwind CSS and the Inter font; adapts to mobile and desktop.
+- **Live TLE fetching with caching**: Retrieves fresh orbital elements from CelesTrak, caching them for 12 hours with graceful fallbacks if the network is unavailable.
 
 ---
 
@@ -20,6 +21,7 @@ A lightweight, browser-based tool that tells you when selected satellites will b
 
 - A modern web browser with JavaScript enabled.
 - Internet connection to load external scripts (Tailwind CSS, Google Fonts, satellite.js).
+- Network access to [CelesTrak](https://celestrak.org/) to fetch current two-line element (TLE) data for the supported satellites. The app caches the results for 12 hours to avoid unnecessary refreshes.
 
 ### Installation
 
